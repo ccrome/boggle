@@ -112,7 +112,7 @@ moves = [
 ]
 
 def solve(board, position, word, dictionary, solutions, used_combos):
-    x, y = position.tolist()
+    x, y = position
     oldchar = board[x][y]
     board[x][y] = '-'
     word += oldchar
@@ -126,18 +126,18 @@ def solve(board, position, word, dictionary, solutions, used_combos):
         return
     if word in dictionary and word not in solutions and len(word) > 2:
         solutions.append(word)
-    for i in range(len(moves)):
-        move = moves[i]
-        newpos = position + move
-        if (newpos[0] >= 4 or newpos[0] < 0 or
-            newpos[1] >= 4 or newpos[1] < 0):
+    for move in moves:
+        movex, movey = move[0], move[1]
+        newx = x + movex
+        newy = y + movey
+        if (newx >= 4 or newx < 0 or
+            newy >= 4 or newy < 0):
             # out of bounds
             continue
-        newx, newy = newpos.tolist()
         if board[newx][newy] == '-':
             # already used
             continue
-        solve(board, np.array((newx, newy)), word, dictionary, solutions, used_combos)
+        solve(board, (newx, newy), word, dictionary, solutions, used_combos)
     board[x][y] = oldchar
 
 def get_score(words):
@@ -175,7 +175,7 @@ def solve_board(dictionary, used_combos, boards, all_solutions):
     solutions = []
     for x in range(4):
         for y in range(4):
-            solve(board, np.array((x, y)), '', dictionary, solutions, used_combos)
+            solve(board, (x, y), '', dictionary, solutions, used_combos)
     solutions = sorted(solutions)
     boards.append(board.tolist())
     all_solutions.append(solutions)
