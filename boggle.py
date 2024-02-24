@@ -1,5 +1,6 @@
 # boggle
 import numpy as np
+import sys
 
 import string
 import random
@@ -7,6 +8,7 @@ import copy
 import pickle
 from pathlib import Path
 import json
+import argparse
 
 dice = [
     ['L', 'R', 'Y', 'T', 'T', 'E'],
@@ -70,6 +72,8 @@ def get_dictionary():
     if Path(pkl).exists():
         with open(pkl, "rb") as f:
             return pickle.load(f)
+    sys.stderr.write("Creating dictionary pickle...")
+    sys.stderr.flush()
     maxlen = 0
     word_list = set()
     used_letter_combos = set()
@@ -84,6 +88,8 @@ def get_dictionary():
             add_letter_combos(used_letter_combos, l)
     with open(pkl, "wb") as f:
         pickle.dump((maxlen, word_list, used_letter_combos), f)
+    sys.stderr.write("Done!\n")
+    sys.stderr.flush()
     with open(pkl, "rb") as f:
         return pickle.load(f)
 
@@ -151,21 +157,59 @@ def get_score(words):
             score += 11
     return score
 
-maxlen, dictionary, used_combos = get_dictionary()
-boards = []
-all_solutions = []
-for i in  range(1000):
-    board = get_board()
-    solutions = []
-    for x in range(4):
-        for y in range(4):
-            solve(board, np.array((x, y)), '', dictionary, solutions, used_combos)
-    solutions = sorted(solutions)
-    boards.append(board.tolist())
-    all_solutions.append(solutions)
 
-with open("solutions.json", "w", encoding='utf-8') as f:
-    r = []
-    for board, solutions in zip(boards, all_solutions):
-        r.append({'board': board, 'solutions': solutions, 'n': len(solutions)})
-    json.dump(r, f)
+def get_args():
+    p = argparse.ArgumentParser()
+    # Add 'solve' and 'results' subcommands
+    subparsers = p.add_subparsers(dest='command')
+    solve_parser = subparsers.add_parser('solve')
+    solve_parser.add_argument('-n', type=int, help='number of boards', default=100)
+    results_parser = subparsers.add_parser('results')
+    args = p.parse_args()
+    if args.command is None:
+        p.print_help()
+        exit()
+    return args
+
+def solve_boards(count):
+    maxlen, dictionary, used_combos = get_dictionary()
+    boards = []
+    all_solutions = []
+    for i in  range(count):
+        board = get_board()
+        solutions = []
+        for x in range(4):
+            for y in range(4):
+                solve(board, np.array((x, y)), '', dictionary, solutions, used_combos)
+        solutions = sorted(solutions)
+        boards.append(board.tolist())
+        all_solutions.append(solutions)
+
+    with open("solutions.json", "w", encoding='utf-8') as f:
+        r = []
+        for board, solutions in zip(boards, all_solutions):
+            r.append({'board': board, 'solutions': solutions, 'n': len(solutions)})
+        json.dump(r, f)
+
+def do_results(args):
+    r = json.load(open("solutions.json"))
+    boards = []
+    for b in r:
+        boards.append((len(b['solutions']), b['solutions'], b['board']))
+    boards = sorted(boards, key=lambda x: x[0])
+    print(boards[0])
+    print(boards[1])
+    print(boards[2])
+    print(boards[-1])
+
+
+def main():
+    args = get_args()
+    if args.command == 'solve':
+        solve_boards(args.n)
+    elif args.command == 'results':
+        do_results(args)
+
+if __name__ == '__main__':
+    main()
+
