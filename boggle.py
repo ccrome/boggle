@@ -198,6 +198,13 @@ def solve_boards(count):
             r.append({'board': board, 'solutions': solutions, 'n': len(solutions)})
         json.dump(r, f)
 
+
+def print_board(board):
+    n, solutions, board = board
+    for line in board:
+        print(" ".join(line))
+    print(f'found {n} solutions: [{", ".join(solutions)}]')
+    
 def do_results(args):
     r = json.load(open("solutions.json"))
     boards = []
@@ -207,14 +214,16 @@ def do_results(args):
         n_solutions.append(len(b['solutions']))
 
     boards = sorted(boards, key=lambda x: x[0])
-    print(boards[0])
-    print(boards[-1])
+    print_board(boards[0])
+    print_board(boards[-1])
     nbins = np.max(n_solutions)
     width = np.max(n_solutions)/nbins
     histogram, bin_edges = np.histogram(n_solutions, bins=nbins)
     if args.log:
         histogram = np.log10(histogram)
     plt.bar(bin_edges[:-1], histogram, width=width, edgecolor='black')
+    plt.xlabel("Number of words found on board")
+    plt.ylabel("Frequency")
     plt.show()
     
 def main():
