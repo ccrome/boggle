@@ -9,6 +9,7 @@ import pickle
 from pathlib import Path
 import json
 import argparse
+import matplotlib.pyplot as plt
 
 dice = [
     ['L', 'R', 'Y', 'T', 'T', 'E'],
@@ -164,6 +165,7 @@ def get_args():
     solve_parser = subparsers.add_parser('solve')
     solve_parser.add_argument('-n', type=int, help='number of boards', default=100)
     results_parser = subparsers.add_parser('results')
+    results_parser.add_argument('-l', '--log', action='store_true', help="Log plot")
     args = p.parse_args()
     if args.command is None:
         p.print_help()
@@ -199,15 +201,22 @@ def solve_boards(count):
 def do_results(args):
     r = json.load(open("solutions.json"))
     boards = []
+    n_solutions = []
     for b in r:
         boards.append((len(b['solutions']), b['solutions'], b['board']))
+        n_solutions.append(len(b['solutions']))
+
     boards = sorted(boards, key=lambda x: x[0])
     print(boards[0])
-    print(boards[1])
-    print(boards[2])
     print(boards[-1])
-
-
+    nbins = np.max(n_solutions)
+    width = np.max(n_solutions)/nbins
+    histogram, bin_edges = np.histogram(n_solutions, bins=nbins)
+    if args.log:
+        histogram = np.log10(histogram)
+    plt.bar(bin_edges[:-1], histogram, width=width, edgecolor='black')
+    plt.show()
+    
 def main():
     args = get_args()
     if args.command == 'solve':
