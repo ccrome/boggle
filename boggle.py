@@ -171,19 +171,25 @@ def get_args():
         exit()
     return args
 
+def solve_board(dictionary, used_combos, boards, all_solutions):
+    board = get_board()
+    solutions = []
+    for x in range(4):
+        for y in range(4):
+            solve(board, np.array((x, y)), '', dictionary, solutions, used_combos)
+    solutions = sorted(solutions)
+    boards.append(board.tolist())
+    all_solutions.append(solutions)
+
+
 def solve_boards(count):
     maxlen, dictionary, used_combos = get_dictionary()
     boards = []
     all_solutions = []
     for i in  range(count):
-        board = get_board()
-        solutions = []
-        for x in range(4):
-            for y in range(4):
-                solve(board, np.array((x, y)), '', dictionary, solutions, used_combos)
-        solutions = sorted(solutions)
-        boards.append(board.tolist())
-        all_solutions.append(solutions)
+        if i % 100 == 0:
+            sys.stderr.write(f"Board {i}\n")
+        solve_board(dictionary, used_combos, boards, all_solutions)
 
     with open("solutions.json", "w", encoding='utf-8') as f:
         r = []
