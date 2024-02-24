@@ -110,9 +110,8 @@ moves = [
     np.array(( 1,  0)), # 6
     np.array(( 1,  1))  # 7
 ]
-depth = 0             
+
 def solve(board, position, word, dictionary, solutions, used_combos):
-    global depth
     x, y = position.tolist()
     oldchar = board[x][y]
     board[x][y] = '-'
@@ -124,14 +123,14 @@ def solve(board, position, word, dictionary, solutions, used_combos):
         (n >= 5 and word[-5:] not in used_combos) or
         (n >= 6 and word[-6:] not in used_combos)):
         board[x][y] = oldchar
-        depth += 1
         return
     if word in dictionary and word not in solutions and len(word) > 2:
         solutions.append(word)
     for i in range(len(moves)):
         move = moves[i]
         newpos = position + move
-        if np.any(newpos >= 4) or np.any(newpos < 0):
+        if (newpos[0] >= 4 or newpos[0] < 0 or
+            newpos[1] >= 4 or newpos[1] < 0):
             # out of bounds
             continue
         newx, newy = newpos.tolist()
