@@ -1,7 +1,7 @@
 # boggle
 import numpy as np
 import sys
-
+import sqlite3
 import time
 import string
 import random
@@ -160,20 +160,6 @@ def get_score(words):
     return score
 
 
-def get_args():
-    p = argparse.ArgumentParser()
-    # Add 'solve' and 'results' subcommands
-    subparsers = p.add_subparsers(dest='command')
-    solve_parser = subparsers.add_parser('solve')
-    solve_parser.add_argument('-n', type=int, help='number of boards', default=100)
-    solve_parser.add_argument('-j', '--parallel', type=int, help="number of parallel threads, default=8", default=8)
-    results_parser = subparsers.add_parser('results')
-    results_parser.add_argument('-l', '--log', action='store_true', help="Log plot")
-    args = p.parse_args()
-    if args.command is None:
-        p.print_help()
-        exit()
-    return args
 
 def solve_board(dictionary, used_combos):
     board = get_board()
@@ -195,14 +181,18 @@ def solve_boards(args):
         all_solutions.append((board.tolist(), solution))
     sys.stderr.write(f"Process {process_id} completed")
     return all_solutions
-    
+
+def str_board(board):
+    result = "\n".join([''.join(line) for line in board])
+    return result
+
 def print_board(board):
     n, solutions, board = board
     for line in board:
         print(" ".join(line))
     print(f'found {n} solutions: [{", ".join(solutions)}]')
-    
-def do_results(args):
+
+def load_results():
     solutions_base = "solutions"
     solutions_json = Path(f"{solutions_base}.json")
     solutions_pkl = Path(f"{solutions_base}.pkl")
@@ -217,7 +207,10 @@ def do_results(args):
         sys.stderr.write("Saving pickle..."); sys.stderr.flush()
         pickle.dump(r, open(solutions_pkl, 'wb'))
     sys.stderr.write("Done\n"); sys.stderr.flush()
-        
+    return r
+
+def do_results(args):
+    r = load_results()
     boards = []
     n_solutions = []
     for b in r:
@@ -231,7 +224,58 @@ def do_results(args):
     histogram, bin_edges = np.histogram(n_solutions, bins=nbins)
     if args.log:
         histogram = np.log10(histogram)
+    plt.bar(bin_edges[:-1], histogram, width=width, edgecolor='black')
+    plt.xlabel("Number of words found on board")
+    plt.ylabel("Frequency")
+    plt.show()
+
+def do_sqlite_results(args):
+    fn = "test.db"
+    path = Path(fn)
+    cx = sqlite3.connect(path)
+    sys.stderr.write("selecting all..."); sys.stderr.flush()
+    r = cx.execute("select board, words from boards")
+    boards = []
+    n_solutions = []
+    for board, n in r:
+        n_solutions.append(n)
+    sys.stderr.write("done\n"); sys.stderr.flush()
+
+    r = cx.execute("select min(n_words) from boards")
+    minwords = None
+    maxwords = None
+    for x in r:
+        minwords = x[0]
+        break
+
+    r = cx.execute("select max(n_words) from boards")
+    for x in r:
+        maxwords = x[0]
+        break
+
+    print(maxwords, minwords)
+    minboards = cx.execute("select id, board, n_words, words from boards where n_words == ?", (minwords, ))
+    maxboards = cx.execute("select id, board, n_words, words from boards where n_words == ?", (maxwords, ))
+    for x in maxboards:
+        boardid, board, n_words, words = x
+        print("****************************")
+        print(board)
+        print(words)
+        print("----------------------------")
+
+    for x in minboards:
+        boardid, board, n_words, words = x
+        print("****************************")
+        print(board)
+        if n_words > 0:
+            print(words)
+        print("----------------------------")
     exit()
+    nbins = np.max(n_solutions)
+    width = np.max(n_solutions)/nbins
+    histogram, bin_edges = np.histogram(n_solutions, bins=nbins)
+    if args.log:
+        histogram = np.log10(histogram)
     plt.bar(bin_edges[:-1], histogram, width=width, edgecolor='black')
     plt.xlabel("Number of words found on board")
     plt.ylabel("Frequency")
@@ -255,14 +299,56 @@ def dispatch_solve_boards(count, threads):
         for board, solution in zip(boards, solutions):
             r.append({'board': board, 'solutions': solution, 'n': len(solution)})
         json.dump(r, f)
+
+
+def do_json2sqlite(args):
+    fn = "test.db"
+    path = Path(fn)
+    if path.exists():
+        path.unlink()
     
+    cx = sqlite3.connect(path)
+    cx.execute("create table boards(id, board, n_words, words)")
+    r = load_results()
+    for i, x in enumerate(r):
+        board = x['board']
+        words = x['solutions']
+        s_board = str_board(board)
+        cx.execute("insert into boards values (?, ?, ?, ?)", (i, s_board, len(words), ",".join(words)))
+        if (i%100) == 0:
+            cx.commit()
+    cx.commit()
+    cx.close()
 def main():
     args = get_args()
     if args.command == 'solve':
         dispatch_solve_boards(args.n, args.parallel)
     elif args.command == 'results':
         do_results(args)
+    elif args.command == 'json2sqlite':
+        do_json2sqlite(args)
+    elif args.command == 'sqlite_results':
+        do_sqlite_results(args)
+    else:
+        raise ValueError(f"unknown command {args.command}")
 
+def get_args():
+    p = argparse.ArgumentParser()
+    # Add 'solve' and 'results' subcommands
+    subparsers = p.add_subparsers(dest='command')
+    solve_parser = subparsers.add_parser('solve')
+    solve_parser.add_argument('-n', type=int, help='number of boards', default=100)
+    solve_parser.add_argument('-j', '--parallel', type=int, help="number of parallel threads, default=8", default=8)
+    results_parser = subparsers.add_parser('results')
+    results_parser.add_argument('-l', '--log', action='store_true', help="Log plot")
+    sqlite = subparsers.add_parser(name='json2sqlite')
+    sqlite_results = subparsers.add_parser(name='sqlite_results')
+    sqlite_results.add_argument('-l', '--log', action='store_true', help="Log plot")
+    args = p.parse_args()
+    if args.command is None:
+        p.print_help()
+        exit()
+    return args
 if __name__ == '__main__':
     main()
 
