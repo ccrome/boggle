@@ -2,6 +2,7 @@
 import numpy as np
 import sys
 
+import time
 import string
 import random
 import copy
@@ -10,6 +11,7 @@ from pathlib import Path
 import json
 import argparse
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
 
 dice = [
     ['L', 'R', 'Y', 'T', 'T', 'E'],
@@ -164,6 +166,7 @@ def get_args():
     subparsers = p.add_subparsers(dest='command')
     solve_parser = subparsers.add_parser('solve')
     solve_parser.add_argument('-n', type=int, help='number of boards', default=100)
+    solve_parser.add_argument('-j', '--parallel', type=int, help="number of parallel threads, default=8", default=8)
     results_parser = subparsers.add_parser('results')
     results_parser.add_argument('-l', '--log', action='store_true', help="Log plot")
     args = p.parse_args()
@@ -172,33 +175,27 @@ def get_args():
         exit()
     return args
 
-def solve_board(dictionary, used_combos, boards, all_solutions):
+def solve_board(dictionary, used_combos):
     board = get_board()
     solutions = []
     for x in range(4):
         for y in range(4):
             solve(board, (x, y), '', dictionary, solutions, used_combos)
-    solutions = sorted(solutions)
-    boards.append(board.tolist())
-    all_solutions.append(solutions)
+    return board, solutions
 
-
-def solve_boards(count):
+def solve_boards(args):
+    process_id, count = args
     maxlen, dictionary, used_combos = get_dictionary()
     boards = []
     all_solutions = []
     for i in  range(count):
         if i % 100 == 0:
-            sys.stderr.write(f"Board {i}\n")
-        solve_board(dictionary, used_combos, boards, all_solutions)
-
-    with open("solutions.json", "w", encoding='utf-8') as f:
-        r = []
-        for board, solutions in zip(boards, all_solutions):
-            r.append({'board': board, 'solutions': solutions, 'n': len(solutions)})
-        json.dump(r, f)
-
-
+            sys.stderr.write(f"Board {process_id} {i}\n")
+        board, solution = solve_board(dictionary, used_combos)
+        all_solutions.append((board.tolist(), solution))
+    sys.stderr.write(f"Process {process_id} completed")
+    return all_solutions
+    
 def print_board(board):
     n, solutions, board = board
     for line in board:
@@ -206,13 +203,26 @@ def print_board(board):
     print(f'found {n} solutions: [{", ".join(solutions)}]')
     
 def do_results(args):
-    r = json.load(open("solutions.json"))
+    solutions_base = "solutions"
+    solutions_json = Path(f"{solutions_base}.json")
+    solutions_pkl = Path(f"{solutions_base}.pkl")
+
+    if (solutions_json.exists() and solutions_pkl.exists() and
+        (solutions_pkl.stat().st_mtime > solutions_json.stat().st_mtime)):
+        sys.stderr.write("Loading pickle..."); sys.stderr.flush()
+        r = pickle.load(open(solutions_pkl, 'rb'))
+    else:
+        sys.stderr.write("Loading json..."); sys.stderr.flush()
+        r = json.load(open(solutions_json))
+        sys.stderr.write("Saving pickle..."); sys.stderr.flush()
+        pickle.dump(r, open(solutions_pkl, 'wb'))
+    sys.stderr.write("Done\n"); sys.stderr.flush()
+        
     boards = []
     n_solutions = []
     for b in r:
         boards.append((len(b['solutions']), b['solutions'], b['board']))
         n_solutions.append(len(b['solutions']))
-
     boards = sorted(boards, key=lambda x: x[0])
     print_board(boards[0])
     print_board(boards[-1])
@@ -221,15 +231,35 @@ def do_results(args):
     histogram, bin_edges = np.histogram(n_solutions, bins=nbins)
     if args.log:
         histogram = np.log10(histogram)
+    exit()
     plt.bar(bin_edges[:-1], histogram, width=width, edgecolor='black')
     plt.xlabel("Number of words found on board")
     plt.ylabel("Frequency")
     plt.show()
+
+def dispatch_solve_boards(count, threads):
+    n_per_process = int(count/threads+0.5)
+    arg_list = [(i, n_per_process) for i in range(threads)]
+    with Pool() as pool:
+        results = pool.map(solve_boards, arg_list)
+    
+    boards = []
+    solutions = []
+    for result in results:
+        for board, solution in result:
+            boards.append(board)
+            solutions.append(solution)
+    
+    with open("solutions.json", "w", encoding='utf-8') as f:
+        r = []
+        for board, solution in zip(boards, solutions):
+            r.append({'board': board, 'solutions': solution, 'n': len(solution)})
+        json.dump(r, f)
     
 def main():
     args = get_args()
     if args.command == 'solve':
-        solve_boards(args.n)
+        dispatch_solve_boards(args.n, args.parallel)
     elif args.command == 'results':
         do_results(args)
 
