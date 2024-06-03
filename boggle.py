@@ -234,7 +234,7 @@ def do_sqlite_results(args):
     path = Path(fn)
     cx = sqlite3.connect(path)
     sys.stderr.write("selecting all..."); sys.stderr.flush()
-    r = cx.execute("select board, words from boards")
+    r = cx.execute("select board, n_words from boards")
     boards = []
     n_solutions = []
     for board, n in r:
@@ -270,7 +270,8 @@ def do_sqlite_results(args):
         if n_words > 0:
             print(words)
         print("----------------------------")
-    exit()
+
+    n_solutions = np.array(n_solutions)
     nbins = np.max(n_solutions)
     width = np.max(n_solutions)/nbins
     histogram, bin_edges = np.histogram(n_solutions, bins=nbins)
@@ -319,6 +320,7 @@ def do_json2sqlite(args):
             cx.commit()
     cx.commit()
     cx.close()
+
 def main():
     args = get_args()
     if args.command == 'solve':
